@@ -1,0 +1,144 @@
+---
+title: "Applied Regression Analysis: HW2"
+author: |
+  | NCCU, Department of Statistics
+  | 統計碩一 \ 葉佐晨
+  | 112354016
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    extra_dependencies:
+      ctex: UTF8
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Variance Decomposition Proportions
+
+## Packages required
+
+```{r message=FALSE}
+library(car)
+library(magrittr)
+library(mctest)
+library(matlib)
+library(knitr)
+library(generics)
+```
+
+## Import data
+
+Data is from **TABLE 9.4 Unstandardized Regressor and Response Variables from Webster, Gunst, and Mason [1974].**
+
+```{r}
+data <- read.table("tb9.4 Webster, Gunst, and Mason.txt", 
+                   header = TRUE, 
+                   row.names = "Observation")
+```
+
+## Center regressors
+
+```{r}
+X <- as.matrix(data[-1])
+X_cen <- scale(X, scale = FALSE)
+```
+
+## Find eigenvectors
+
+Show that **TABLE 9.6 Eigenvectors for the Webster, Gunst, and Mason Data**.
+
+```{r}
+X_corxz <- scale(X, scale = FALSE) %>% 
+  apply(2, function(x) x/sqrt(sum(x^2)))
+
+tb_eigvt <- eigen(t(X_corxz) %*% X_corxz) %>% 
+  .[["vectors"]] %>% 
+  round(5) %>% 
+  as.data.frame
+colnames(tb_eigvt) <- paste0("t", 1:6)
+
+kable(tb_eigvt, longtable = FALSE, 
+      caption = "TABLE 9.6 Eigenvectors for the Webster, Gunst, and Mason Data")
+```
+
+## Eigenvalues and Variance Decomposition Proportion
+
+Show that **TABLE 9.7 Variance Decomposition Proportions for the Webster, Gunst, and Mason[1974] Data**.\
+There are two methods can produce table 9.7, first is using package `mctest`, which is writed to do eigenvalues and variance decomposition proportion, second is caculating mathematically by hand.
+
+### method 1, with `mctest`
+
+```{r}
+md_A <- lm(data$y ~ 0 + X_cen)
+md_B <- lm(data$y ~ X)
+```
+
+#### A. Regressors Centered
+
+```{r comment=""}
+structure(eigprop(md_A))
+```
+
+#### B. Regressors Not Centered
+
+```{r comment=""}
+structure(eigprop(md_B))
+```
+
+### method 2, without `mctest`
+
+#### A. Regressors Centered
+
+```{r}
+eigval_A <- eigen(t(X_corxz) %*% X_corxz)$values %>% round(5)
+
+D_A <- svd(X_corxz)$d
+eta_A <- (max(D_A)/D_A) %>% 
+  round(5)
+
+vif_A <- data.frame(y = data$y, X_corxz) %>% 
+  lm(y ~ ., data = .) %>% 
+  vif
+t_A <- svd(X_corxz)$v
+
+vdp_A <- t(t_A^2 %*% diag(1/D_A)^2) %*% diag(1/vif_A) %>% round(4)
+dimnames(vdp_A) <- list(NULL,colnames(X))
+
+tb_A <- data.frame(Number = 1:6,
+                   Eigenvalue = eigval_A,
+                   `Condition Indices` = eta_A,
+                   vdp_A)
+kable(tb_A, longtable = FALSE, caption = "TABLE 9.7: A. Regressors Centered")
+```
+
+#### B. Regressors Not Centered
+
+```{r warning=FALSE}
+X_corxz0 <- cbind(x0=1, X) %>% 
+  apply(2, function(x) x/sqrt(sum(x^2)))
+eigval_B <- (eigen(t(X_corxz0) %*% X_corxz0)$values)%>% 
+  round(5)
+
+D_B <- svd(X_corxz0)$d
+eta_B <- (max(D_B)/D_B) %>% round(5)
+
+t_B <- svd(X_corxz0)$v
+
+vif_B <- data.frame(y = data$y, cbind(x0=1, X)) %>% 
+  lm(y ~ 0 + ., data = .) %>% 
+  vif
+t <- svd(X_corxz)$v
+vdp_B <- t(t_B^2 %*% diag(1/D_B)^2) %*% diag(1/vif_B) %>% round(4)
+dimnames(vdp_B) <- list(NULL, colnames(X_corxz0))
+
+tb_B <- data.frame(Number = 1:7,
+                   Eigenvalue = eigval_B,
+                   `Condition Indices` = eta_B,
+                   vdp_B)
+
+kable(tb_B, longtable = FALSE, caption = "TABLE 9.7: B. Regressors Not Centered ")
+```
